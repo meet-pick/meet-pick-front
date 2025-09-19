@@ -1,8 +1,8 @@
-// src/components/layout/Sidebar.tsx
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
@@ -20,6 +20,7 @@ import {
   Clock,
   Star,
 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface SidebarProps {
   className?: string;
@@ -78,16 +79,31 @@ const quickActions = [
 export function Sidebar({ className }: SidebarProps) {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const pathname = usePathname();
+  const { user, logout, isAuthenticated } = useAuth();
 
   const toggleMobile = () => setIsMobileOpen(!isMobileOpen);
+
+  const handleLogout = async () => {
+    if (confirm("로그아웃 하시겠습니까?")) {
+      await logout();
+    }
+  };
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full bg-white border-r border-background-secondary">
       {/* 로고/헤더 */}
       <div className="flex items-center justify-between h-16 px-6 border-b border-background-secondary">
-        <Link href="/" className="flex items-center space-x-2">
-          <div className="w-8 h-8 bg-gradient-to-br from-primary to-secondary rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold text-sm">MP</span>
+        <Link href="/" className="flex items-center space-x-3">
+          {/* MeetPick 로고 SVG */}
+          <div className="w-10 h-10 flex-shrink-0">
+            <Image
+              src="/meet-pick-logo-noword.svg"
+              alt="MeetPick Logo"
+              width={40}
+              height={40}
+              className="w-full h-full object-contain"
+              priority
+            />
           </div>
           <span className="text-xl font-bold text-text-primary">MeetPick</span>
         </Link>
@@ -108,10 +124,25 @@ export function Sidebar({ className }: SidebarProps) {
             <User className="w-5 h-5 text-white" />
           </div>
           <div className="flex-1">
-            <h3 className="text-sm font-semibold text-text-primary">홍길동</h3>
-            <p className="text-xs text-text-primary opacity-60">
-              hong@example.com
-            </p>
+            {isAuthenticated && user ? (
+              <>
+                <h3 className="text-sm font-semibold text-text-primary">
+                  {user.nickname}
+                </h3>
+                <p className="text-xs text-text-primary opacity-60">
+                  @{user.username}
+                </p>
+              </>
+            ) : (
+              <>
+                <h3 className="text-sm font-semibold text-text-primary">
+                  게스트
+                </h3>
+                <p className="text-xs text-text-primary opacity-60">
+                  로그인이 필요합니다
+                </p>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -205,10 +236,24 @@ export function Sidebar({ className }: SidebarProps) {
             <Settings className="w-5 h-5 opacity-60" />
             <span>설정</span>
           </Link>
-          <button className="flex items-center space-x-3 px-3 py-2 rounded-lg text-danger hover:bg-danger-50 transition-colors w-full text-left">
-            <LogOut className="w-5 h-5" />
-            <span>로그아웃</span>
-          </button>
+          {isAuthenticated ? (
+            <button
+              onClick={handleLogout}
+              className="flex items-center space-x-3 px-3 py-2 rounded-lg text-danger hover:bg-danger-50 transition-colors w-full text-left"
+            >
+              <LogOut className="w-5 h-5" />
+              <span>로그아웃</span>
+            </button>
+          ) : (
+            <Link
+              href="/login"
+              className="flex items-center space-x-3 px-3 py-2 rounded-lg text-primary hover:bg-primary-50 transition-colors"
+              onClick={() => setIsMobileOpen(false)}
+            >
+              <LogOut className="w-5 h-5" />
+              <span>로그인</span>
+            </Link>
+          )}
         </nav>
       </div>
     </div>
@@ -254,4 +299,3 @@ export function Sidebar({ className }: SidebarProps) {
     </>
   );
 }
-

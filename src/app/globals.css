@@ -118,8 +118,6 @@
   }
 }
 
-
-
 @layer base {
   * {
     @apply border-border;
@@ -127,4 +125,32 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Auth 페이지 전용 스타일 */
+.auth-layout {
+  /* iOS Safari에서 100vh 문제 해결 */
+  min-height: 100vh;
+  min-height: -webkit-fill-available;
+}
+
+@supports (-webkit-touch-callout: none) {
+  .auth-layout {
+    min-height: -webkit-fill-available;
+  }
+}
+
+/* 모바일에서 입력 필드 확대 방지 */
+@media screen and (max-width: 768px) {
+  input[type="text"],
+  input[type="email"],
+  input[type="password"] {
+    font-size: 16px !important;
+  }
+}
+
+/* 비밀번호 표시/숨김 버튼 터치 영역 확대 */
+.password-toggle {
+  min-width: 44px;
+  min-height: 44px;
 }

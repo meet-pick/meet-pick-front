@@ -1,6 +1,7 @@
+"use client";
+
 import { Sidebar } from "./Sidebar";
 
-// src/components/layout/MainLayout.tsx
 interface MainLayoutProps {
   children: React.ReactNode;
 }
