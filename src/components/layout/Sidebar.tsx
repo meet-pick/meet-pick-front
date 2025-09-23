@@ -19,6 +19,7 @@ import {
   X,
   Clock,
   Star,
+  CircleUserRound,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -119,7 +120,7 @@ export function Sidebar({ className }: SidebarProps) {
 
       {/* 사용자 프로필 */}
       <div className="px-6 py-4 border-b border-background-secondary">
-        <div className="flex items-center space-x-3">
+        <Link href="/mypage" className="flex items-center space-x-3">
           <div className="w-10 h-10 bg-gradient-to-br from-accent to-primary rounded-full flex items-center justify-center">
             <User className="w-5 h-5 text-white" />
           </div>
@@ -144,7 +145,7 @@ export function Sidebar({ className }: SidebarProps) {
               </>
             )}
           </div>
-        </div>
+        </Link>
       </div>
 
       {/* 빠른 액션 버튼들 */}
@@ -221,20 +222,12 @@ export function Sidebar({ className }: SidebarProps) {
       <div className="px-6 py-4 border-t border-background-secondary">
         <nav className="space-y-1">
           <Link
-            href="/favorites"
+            href="/mypage"
             className="flex items-center space-x-3 px-3 py-2 rounded-lg text-text-primary hover:bg-background transition-colors"
             onClick={() => setIsMobileOpen(false)}
           >
-            <Star className="w-5 h-5 opacity-60" />
-            <span>즐겨찾기</span>
-          </Link>
-          <Link
-            href="/settings"
-            className="flex items-center space-x-3 px-3 py-2 rounded-lg text-text-primary hover:bg-background transition-colors"
-            onClick={() => setIsMobileOpen(false)}
-          >
-            <Settings className="w-5 h-5 opacity-60" />
-            <span>설정</span>
+            <CircleUserRound className="w-5 h-5 opacity-60" />
+            <span>마이페이지</span>
           </Link>
           {isAuthenticated ? (
             <button
