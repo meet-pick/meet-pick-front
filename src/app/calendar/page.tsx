@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { Calendar, momentLocalizer, View, Views } from "react-big-calendar";
 import moment from "moment";
-import "moment/locale/ko"; // 한국어 로케일
+import "moment/locale/ko";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,7 +13,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,80 +26,32 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
   Plus,
   Calendar as CalendarIcon,
   Clock,
-  Users,
   MapPin,
   Filter,
   Grid3X3,
   List,
   ChevronLeft,
   ChevronRight,
-  ChevronDown,
   BarChart3,
+  AlertCircle,
 } from "lucide-react";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+import { useCalendar, CalendarEvent } from "@/hooks/useCalendar";
+import { useAuth } from "@/contexts/AuthContext";
 
 // moment 한국어 설정
 moment.locale("ko");
 const localizer = momentLocalizer(moment);
 
-// 이벤트 타입 정의 (Java LocalDateTime과 매핑)
-interface CalendarEvent {
-  id: string;
-  title: string;
-  start: Date;
-  end: Date;
-  description?: string;
-  type: "meeting" | "personal" | "work" | "social";
-  location?: string;
-  participants?: number;
-  color?: string;
-}
-
-// 더미 데이터 (실제로는 API에서 가져올 예정)
-const initialEvents: CalendarEvent[] = [
-  {
-    id: "1",
-    title: "팀 회의",
-    start: new Date(2025, 0, 25, 14, 0), // 2025-01-25 14:00
-    end: new Date(2025, 0, 25, 15, 30),
-    type: "work",
-    description: "주간 팀 회의 및 진행상황 공유",
-    location: "회의실 A",
-    participants: 8,
-    color: "#2EC4B6",
-  },
-  {
-    id: "2",
-    title: "개발자 모임",
-    start: new Date(2025, 0, 26, 19, 0),
-    end: new Date(2025, 0, 26, 21, 0),
-    type: "social",
-    description: "React 개발자 네트워킹 모임",
-    location: "강남역 스터디룸",
-    participants: 25,
-    color: "#5BC0EB",
-  },
-  {
-    id: "3",
-    title: "프로젝트 발표",
-    start: new Date(2025, 0, 28, 10, 0),
-    end: new Date(2025, 0, 28, 12, 0),
-    type: "work",
-    description: "Q1 프로젝트 최종 발표",
-    location: "대회의실",
-    participants: 15,
-    color: "#4A90E2",
-  },
-];
-
+// 이벤트 타입별 색상과 라벨
 const eventTypeColors = {
   meeting: "#2EC4B6",
   personal: "#4A90E2",
@@ -116,7 +67,19 @@ const eventTypeLabels = {
 };
 
 export default function CalendarPage() {
-  const [events, setEvents] = useState<CalendarEvent[]>(initialEvents);
+  const { isAuthenticated } = useAuth();
+  const {
+    events,
+    isLoading,
+    error,
+    clearError,
+    fetchEvents,
+    createEvent,
+    updateEvent,
+    deleteEvent,
+    refreshCurrentMonth,
+  } = useCalendar();
+
   const [currentView, setCurrentView] = useState<View>(Views.MONTH);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(
@@ -124,7 +87,32 @@ export default function CalendarPage() {
   );
   const [isEventDialogOpen, setIsEventDialogOpen] = useState(false);
   const [isNewEventDialogOpen, setIsNewEventDialogOpen] = useState(false);
+  const [isEditEventDialogOpen, setIsEditEventDialogOpen] = useState(false);
   const [filterType, setFilterType] = useState<string>("all");
+
+  // 컴포넌트 마운트 시 현재 월의 일정 불러오기
+  useEffect(() => {
+    if (isAuthenticated) {
+      refreshCurrentMonth();
+    }
+  }, [isAuthenticated, refreshCurrentMonth]);
+
+  // 날짜 변경 시 해당 월의 일정 불러오기
+  useEffect(() => {
+    if (isAuthenticated) {
+      const startOfMonth = new Date(
+        currentDate.getFullYear(),
+        currentDate.getMonth(),
+        1
+      );
+      const endOfMonth = new Date(
+        currentDate.getFullYear(),
+        currentDate.getMonth() + 1,
+        0
+      );
+      fetchEvents(startOfMonth, endOfMonth);
+    }
+  }, [currentDate, isAuthenticated, fetchEvents]);
 
   // 필터링된 이벤트
   const filteredEvents = useMemo(() => {
@@ -134,12 +122,14 @@ export default function CalendarPage() {
 
   // 이벤트 스타일 설정
   const eventStyleGetter = useCallback((event: CalendarEvent) => {
+    const eventColor = event.color || eventTypeColors[event.type];
     return {
       style: {
-        backgroundColor: event.color || eventTypeColors[event.type],
-        borderColor: event.color || eventTypeColors[event.type],
+        backgroundColor: eventColor,
+        borderWidth: "1px",
+        borderStyle: "solid",
+        borderColor: eventColor,
         color: "white",
-        border: "none",
         borderRadius: "4px",
         fontSize: "12px",
         padding: "2px 4px",
@@ -156,29 +146,42 @@ export default function CalendarPage() {
   // 날짜 슬롯 클릭 핸들러 (새 이벤트 생성)
   const handleSlotSelect = useCallback(
     ({ start, end }: { start: Date; end: Date }) => {
-      setIsNewEventDialogOpen(true);
+      if (isAuthenticated) {
+        setIsNewEventDialogOpen(true);
+      }
     },
-    []
+    [isAuthenticated]
   );
 
   // 새 이벤트 추가
-  const handleAddEvent = (eventData: Partial<CalendarEvent>) => {
-    const newEvent: CalendarEvent = {
-      id: Date.now().toString(),
-      title: eventData.title || "새 이벤트",
-      start: eventData.start || new Date(),
-      end: eventData.end || new Date(),
-      type: (eventData.type as CalendarEvent["type"]) || "personal",
-      description: eventData.description,
-      location: eventData.location,
-      participants: eventData.participants,
-      color:
-        eventTypeColors[
-          (eventData.type as CalendarEvent["type"]) || "personal"
-        ],
-    };
-    setEvents((prev) => [...prev, newEvent]);
-    setIsNewEventDialogOpen(false);
+  const handleAddEvent = async (eventData: Partial<CalendarEvent>) => {
+    const success = await createEvent(eventData);
+    if (success) {
+      setIsNewEventDialogOpen(false);
+    }
+  };
+
+  // 이벤트 수정
+  const handleEditEvent = async (eventData: Partial<CalendarEvent>) => {
+    if (!selectedEvent) return;
+
+    const success = await updateEvent(selectedEvent.id, eventData);
+    if (success) {
+      setIsEditEventDialogOpen(false);
+      setIsEventDialogOpen(false);
+      setSelectedEvent(null);
+    }
+  };
+
+  // 이벤트 삭제
+  const handleDeleteEvent = async (eventId: string) => {
+    if (confirm("정말 이 일정을 삭제하시겠습니까?")) {
+      const success = await deleteEvent(eventId);
+      if (success) {
+        setIsEventDialogOpen(false);
+        setSelectedEvent(null);
+      }
+    }
   };
 
   // 커스텀 툴바
@@ -259,9 +262,11 @@ export default function CalendarPage() {
             </Button>
           </div>
 
-          <Button onClick={() => setIsNewEventDialogOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />새 일정
-          </Button>
+          {isAuthenticated && (
+            <Button onClick={() => setIsNewEventDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />새 일정
+            </Button>
+          )}
         </div>
       </div>
     );
@@ -275,6 +280,33 @@ export default function CalendarPage() {
           일정을 관리하고 새로운 모임을 계획해보세요
         </p>
       </div>
+
+      {/* 에러 메시지 */}
+      {error && (
+        <div className="mb-4 p-3 bg-danger-50 border border-danger rounded-lg flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <AlertCircle className="h-4 w-4 text-danger flex-shrink-0" />
+            <p className="text-sm text-danger">{error}</p>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={clearError}
+            className="text-danger hover:text-danger"
+          >
+            ×
+          </Button>
+        </div>
+      )}
+
+      {/* 로그인 필요 메시지 */}
+      {!isAuthenticated && (
+        <div className="mb-4 p-4 bg-warning-50 border border-warning rounded-lg text-center">
+          <p className="text-warning-700">
+            캘린더를 사용하려면 로그인이 필요합니다.
+          </p>
+        </div>
+      )}
 
       {/* 통계 섹션 - 데스크톱용 */}
       <div className="hidden md:grid grid-cols-4 gap-4">
@@ -387,50 +419,61 @@ export default function CalendarPage() {
       {/* 캘린더 */}
       <Card>
         <CardContent className="p-6">
-          <div style={{ height: "600px" }}>
-            <Calendar
-              localizer={localizer}
-              events={filteredEvents}
-              startAccessor="start"
-              endAccessor="end"
-              titleAccessor="title"
-              view={currentView}
-              onView={setCurrentView}
-              date={currentDate}
-              onNavigate={setCurrentDate}
-              onSelectEvent={handleEventClick}
-              onSelectSlot={handleSlotSelect}
-              selectable
-              eventPropGetter={eventStyleGetter}
-              components={{
-                toolbar: CustomToolbar,
-              }}
-              messages={{
-                month: "월",
-                week: "주",
-                day: "일",
-                today: "오늘",
-                previous: "이전",
-                next: "다음",
-                allDay: "종일",
-                noEventsInRange: "이 기간에 일정이 없습니다",
-                showMore: (count) => `+${count}개 더보기`,
-              }}
-              formats={{
-                monthHeaderFormat: "YYYY년 M월",
-                dayHeaderFormat: "M월 D일 dddd",
-                dayRangeHeaderFormat: ({ start, end }) =>
-                  `${moment(start).format("M월 D일")} - ${moment(end).format(
-                    "M월 D일"
-                  )}`,
-                timeGutterFormat: "HH:mm",
-                eventTimeRangeFormat: ({ start, end }) =>
-                  `${moment(start).format("HH:mm")} - ${moment(end).format(
-                    "HH:mm"
-                  )}`,
-              }}
-            />
-          </div>
+          {isLoading ? (
+            <div className="flex items-center justify-center h-96">
+              <div className="text-center">
+                <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                <p className="text-text-primary opacity-60">
+                  일정을 불러오는 중...
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div style={{ height: "600px" }}>
+              <Calendar
+                localizer={localizer}
+                events={filteredEvents}
+                startAccessor="start"
+                endAccessor="end"
+                titleAccessor="title"
+                view={currentView}
+                onView={setCurrentView}
+                date={currentDate}
+                onNavigate={setCurrentDate}
+                onSelectEvent={handleEventClick}
+                onSelectSlot={handleSlotSelect}
+                selectable={isAuthenticated}
+                eventPropGetter={eventStyleGetter}
+                components={{
+                  toolbar: CustomToolbar,
+                }}
+                messages={{
+                  month: "월",
+                  week: "주",
+                  day: "일",
+                  today: "오늘",
+                  previous: "이전",
+                  next: "다음",
+                  allDay: "종일",
+                  noEventsInRange: "이 기간에 일정이 없습니다",
+                  showMore: (count) => `+${count}개 더보기`,
+                }}
+                formats={{
+                  monthHeaderFormat: "YYYY년 M월",
+                  dayHeaderFormat: "M월 D일 dddd",
+                  dayRangeHeaderFormat: ({ start, end }) =>
+                    `${moment(start).format("M월 D일")} - ${moment(end).format(
+                      "M월 D일"
+                    )}`,
+                  timeGutterFormat: "HH:mm",
+                  eventTimeRangeFormat: ({ start, end }) =>
+                    `${moment(start).format("HH:mm")} - ${moment(end).format(
+                      "HH:mm"
+                    )}`,
+                }}
+              />
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -474,15 +517,6 @@ export default function CalendarPage() {
                   </div>
                 )}
 
-                {selectedEvent.participants && (
-                  <div className="flex items-start space-x-3">
-                    <Users className="h-4 w-4 mt-0.5 text-text-primary opacity-60" />
-                    <div className="text-sm">
-                      {selectedEvent.participants}명 참여
-                    </div>
-                  </div>
-                )}
-
                 {selectedEvent.description && (
                   <div className="space-y-2">
                     <div className="text-sm font-medium">설명</div>
@@ -493,18 +527,27 @@ export default function CalendarPage() {
                 )}
               </div>
 
-              <div className="flex space-x-2 pt-2">
-                <Button variant="outline" size="sm" className="flex-1">
-                  수정
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 text-danger hover:text-danger"
-                >
-                  삭제
-                </Button>
-              </div>
+              {isAuthenticated && (
+                <div className="flex space-x-2 pt-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => setIsEditEventDialogOpen(true)}
+                  >
+                    수정
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1 text-danger hover:text-danger"
+                    onClick={() => handleDeleteEvent(selectedEvent.id)}
+                    disabled={isLoading}
+                  >
+                    {isLoading ? "삭제 중..." : "삭제"}
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </DialogContent>
@@ -524,29 +567,64 @@ export default function CalendarPage() {
           <NewEventForm
             onSubmit={handleAddEvent}
             onCancel={() => setIsNewEventDialogOpen(false)}
+            isLoading={isLoading}
           />
+        </DialogContent>
+      </Dialog>
+      {/* 이벤트 수정 다이얼로그 */}
+      <Dialog
+        open={isEditEventDialogOpen}
+        onOpenChange={setIsEditEventDialogOpen}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>일정 수정</DialogTitle>
+            <DialogDescription>일정 정보를 수정하세요</DialogDescription>
+          </DialogHeader>
+
+          {selectedEvent && (
+            <EditEventForm
+              event={selectedEvent}
+              onSubmit={handleEditEvent}
+              onCancel={() => setIsEditEventDialogOpen(false)}
+              isLoading={isLoading}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </div>
   );
 }
 
-// 새 이벤트 폼 컴포넌트
-function NewEventForm({
+// 이벤트 수정 폼 컴포넌트
+function EditEventForm({
+  event,
   onSubmit,
   onCancel,
+  isLoading,
 }: {
+  event: CalendarEvent;
   onSubmit: (data: Partial<CalendarEvent>) => void;
   onCancel: () => void;
+  isLoading: boolean;
 }) {
+  // 날짜를 로컬 타임존으로 변환하는 헬퍼 함수
+  const formatDateTimeLocal = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    const hours = String(date.getHours()).padStart(2, "0");
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
   const [formData, setFormData] = useState({
-    title: "",
-    type: "personal" as CalendarEvent["type"],
-    start: "",
-    end: "",
-    description: "",
-    location: "",
-    participants: "",
+    title: event.title,
+    type: event.type,
+    start: formatDateTimeLocal(event.start), // 로컬 타임존으로 변환
+    end: formatDateTimeLocal(event.end), // 로컬 타임존으로 변환
+    description: event.description || "",
+    location: event.location || "",
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -555,9 +633,135 @@ function NewEventForm({
       ...formData,
       start: new Date(formData.start),
       end: new Date(formData.end),
-      participants: formData.participants
-        ? parseInt(formData.participants)
-        : undefined,
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="edit-title">제목*</Label>
+        <Input
+          id="edit-title"
+          value={formData.title}
+          onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+          placeholder="일정 제목을 입력하세요"
+          required
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="edit-type">유형</Label>
+        <Select
+          value={formData.type}
+          onValueChange={(value: CalendarEvent["type"]) =>
+            setFormData({ ...formData, type: value })
+          }
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="personal">개인</SelectItem>
+            <SelectItem value="work">업무</SelectItem>
+            <SelectItem value="meeting">모임</SelectItem>
+            <SelectItem value="social">소셜</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="edit-start">시작 시간*</Label>
+          <Input
+            id="edit-start"
+            type="datetime-local"
+            value={formData.start}
+            onChange={(e) =>
+              setFormData({ ...formData, start: e.target.value })
+            }
+            required
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="edit-end">종료 시간*</Label>
+          <Input
+            id="edit-end"
+            type="datetime-local"
+            value={formData.end}
+            onChange={(e) => setFormData({ ...formData, end: e.target.value })}
+            required
+          />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="edit-location">장소</Label>
+        <Input
+          id="edit-location"
+          value={formData.location}
+          onChange={(e) =>
+            setFormData({ ...formData, location: e.target.value })
+          }
+          placeholder="장소를 입력하세요"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="edit-description">설명</Label>
+        <Textarea
+          id="edit-description"
+          value={formData.description}
+          onChange={(e) =>
+            setFormData({ ...formData, description: e.target.value })
+          }
+          placeholder="일정에 대한 설명을 입력하세요"
+          rows={3}
+        />
+      </div>
+
+      <div className="flex space-x-2 pt-4">
+        <Button type="submit" className="flex-1" disabled={isLoading}>
+          {isLoading ? "수정 중..." : "수정"}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onCancel}
+          className="flex-1"
+          disabled={isLoading}
+        >
+          취소
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+// 새 이벤트 폼 컴포넌트
+function NewEventForm({
+  onSubmit,
+  onCancel,
+  isLoading,
+}: {
+  onSubmit: (data: Partial<CalendarEvent>) => void;
+  onCancel: () => void;
+  isLoading: boolean;
+}) {
+  const [formData, setFormData] = useState({
+    title: "",
+    type: "personal" as CalendarEvent["type"],
+    start: "",
+    end: "",
+    description: "",
+    location: "",
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSubmit({
+      ...formData,
+      start: new Date(formData.start),
+      end: new Date(formData.end),
     });
   };
 
@@ -632,20 +836,6 @@ function NewEventForm({
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="participants">참여 인원</Label>
-        <Input
-          id="participants"
-          type="number"
-          value={formData.participants}
-          onChange={(e) =>
-            setFormData({ ...formData, participants: e.target.value })
-          }
-          placeholder="참여 인원 수"
-          min="1"
-        />
-      </div>
-
-      <div className="space-y-2">
         <Label htmlFor="description">설명</Label>
         <Textarea
           id="description"
@@ -659,14 +849,15 @@ function NewEventForm({
       </div>
 
       <div className="flex space-x-2 pt-4">
-        <Button type="submit" className="flex-1">
-          추가
+        <Button type="submit" className="flex-1" disabled={isLoading}>
+          {isLoading ? "추가 중..." : "추가"}
         </Button>
         <Button
           type="button"
           variant="outline"
           onClick={onCancel}
           className="flex-1"
+          disabled={isLoading}
         >
           취소
         </Button>
